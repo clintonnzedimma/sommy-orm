@@ -1,0 +1,220 @@
+#!/usr/bin/env php
+<?php
+// Simple Sommy ORM CLI for migrations
+
+use Sommy\ORM\SommyManager;
+use Sommy\ORM\QueryInterface;
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+function println($msg) { fwrite(STDOUT, $msg . PHP_EOL); }
+function errorln($msg) { fwrite(STDERR, $msg . PHP_EOL); }
+
+function loadConfig(): array
+{
+    $paths = [getcwd() . '/sommy.config.php', getcwd() . '/sommy.php'];
+    foreach ($paths as $p) {
+        if (is_file($p)) {
+            $cfg = require $p;
+            if (is_array($cfg)) return $cfg;
+        }
+    }
+    return [];
+}
+
+function ensureMigrationsTable(QueryInterface $qi): void
+{
+    $qi->createTable('sommy_migrations', [
+        'id' => ['type' => 'INTEGER', 'primaryKey' => true, 'autoIncrement' => true, 'allowNull' => false],
+        'name' => ['type' => 'VARCHAR', 'length' => 255, 'allowNull' => false],
+        'applied_at' => ['type' => 'DATETIME', 'allowNull' => false],
+    ], ['ifNotExists' => true]);
+}
+
+function getAppliedMigrations(QueryInterface $qi): array
+{
+    try {
+        $rows = $qi->select('sommy_migrations');
+    } catch (Throwable $e) {
+        ensureMigrationsTable($qi);
+        $rows = $qi->select('sommy_migrations');
+    }
+    $map = [];
+    foreach ($rows as $r) { $map[$r['name']] = true; }
+    return $map;
+}
+
+function recordMigration(QueryInterface $qi, string $name): void
+{
+    $qi->insert('sommy_migrations', [
+        'name' => $name,
+        'applied_at' => date('Y-m-d H:i:s'),
+    ]);
+}
+
+function removeMigrationRecord(QueryInterface $qi, string $name): void
+{
+    $qi->delete('sommy_migrations', ['name' => $name]);
+}
+
+function loadMigrations(string $dir): array
+{
+    if (!is_dir($dir)) return [];
+    $files = glob($dir . DIRECTORY_SEPARATOR . '*.php');
+    sort($files);
+    $migrations = [];
+    foreach ($files as $file) {
+        require_once $file;
+        $base = basename($file, '.php');
+        $class = 'Migration_' . preg_replace('/[^0-9A-Za-z_]/', '_', $base);
+        if (class_exists($class)) {
+            $migrations[$base] = $class;
+        }
+    }
+    return $migrations;
+}
+
+function cmd_init_config(): void
+{
+    $path = getcwd() . '/sommy.config.php';
+    if (file_exists($path)) {
+        errorln('sommy.config.php already exists');
+        exit(1);
+    }
+    $tpl = <<<'PHP'
+<?php
+// Return DB config for Sommy ORM
+return [
+    'dialect' => 'sqlite',
+    'database' => __DIR__ . '/database.sqlite',
+    // For MySQL / MariaDB:
+    // 'dialect' => 'mysql',
+    // 'host' => '127.0.0.1',
+    // 'port' => 3306,
+    // 'database' => 'testdb',
+    // 'username' => 'root',
+    // 'password' => '',
+    // 'charset' => 'utf8mb4',
+];
+PHP;
+    file_put_contents($path, $tpl);
+    println("Created $path");
+}
+
+function cmd_migrate_create(string $name): void
+{
+    $dir = getcwd() . '/database/migrations';
+    if (!is_dir($dir)) mkdir($dir, 0777, true);
+    $ts = date('YmdHis');
+    $base = $ts . '_' . preg_replace('/[^0-9A-Za-z_]/', '_', $name);
+    $file = $dir . DIRECTORY_SEPARATOR . $base . '.php';
+    $class = 'Migration_' . preg_replace('/[^0-9A-Za-z_]/', '_', $base);
+    $tpl = <<<PHP
+<?php
+use Sommy\\ORM\\QueryInterface;
+
+class {$class}
+{
+    public function up(QueryInterface $qi): void
+    {
+        // Example:
+        // $qi->createTable('users', [
+        //     'id' => ['type' => 'INTEGER', 'primaryKey' => true, 'autoIncrement' => true, 'allowNull' => false],
+        //     'name' => ['type' => 'VARCHAR', 'length' => 255, 'allowNull' => false],
+        // ]);
+    }
+
+    public function down(QueryInterface $qi): void
+    {
+        // $qi->dropTable('users');
+    }
+}
+PHP;
+    file_put_contents($file, $tpl);
+    println("Created migration: $file");
+}
+
+function cmd_migrate_up(SommyManager $sommy): void
+{
+    $qi = $sommy->getQueryInterface();
+    ensureMigrationsTable($qi);
+    $applied = getAppliedMigrations($qi);
+    $migrations = loadMigrations(getcwd() . '/database/migrations');
+    $count = 0;
+    foreach ($migrations as $base => $class) {
+        if (!empty($applied[$base])) continue;
+        $obj = new $class();
+        println("Applying $base...");
+        $sommy->getConnection()->beginTransaction();
+        try {
+            $obj->up($qi);
+            recordMigration($qi, $base);
+            $sommy->getConnection()->commit();
+            $count++;
+        } catch (Throwable $e) {
+            $sommy->getConnection()->rollBack();
+            errorln("Failed $base: " . $e->getMessage());
+            exit(1);
+        }
+    }
+    println("Applied {$count} migration(s)");
+}
+
+function cmd_migrate_down(SommyManager $sommy): void
+{
+    $qi = $sommy->getQueryInterface();
+    ensureMigrationsTable($qi);
+    $migrations = loadMigrations(getcwd() . '/database/migrations');
+    if (empty($migrations)) { println('No migrations found'); return; }
+    // Find last applied by timestamp order
+    $appliedRows = $qi->select('sommy_migrations', ['name'], [], ['order' => ['id' => 'DESC'], 'limit' => 1]);
+    if (empty($appliedRows)) { println('No applied migrations'); return; }
+    $last = $appliedRows[0]['name'];
+    if (empty($migrations[$last])) { errorln("Migration file not found for $last"); return; }
+    $class = $migrations[$last];
+    $obj = new $class();
+    println("Reverting $last...");
+    $sommy->getConnection()->beginTransaction();
+    try {
+        $obj->down($qi);
+        removeMigrationRecord($qi, $last);
+        $sommy->getConnection()->commit();
+        println('Reverted 1 migration');
+    } catch (Throwable $e) {
+        $sommy->getConnection()->rollBack();
+        errorln('Failed to revert: ' . $e->getMessage());
+        exit(1);
+    }
+}
+
+// Entry
+$argv = $_SERVER['argv'];
+array_shift($argv); // script
+$cmd = array_shift($argv) ?: 'help';
+
+switch ($cmd) {
+    case 'init:config':
+        cmd_init_config();
+        break;
+    case 'migrate:create':
+        $name = $argv[0] ?? null;
+        if (!$name) { errorln('Usage: sommy migrate:create <name>'); exit(1); }
+        cmd_migrate_create($name);
+        break;
+    case 'migrate:up':
+    case 'migrate:down':
+        $cfg = loadConfig();
+        if (!$cfg) { errorln('Missing sommy.config.php returning DB config'); exit(1); }
+        $sommy = new SommyManager($cfg);
+        if ($cmd === 'migrate:up') cmd_migrate_up($sommy); else cmd_migrate_down($sommy);
+        break;
+    case 'help':
+    default:
+        println('Sommy ORM CLI');
+        println('  sommy init:config                 Create sommy.config.php');
+        println('  sommy migrate:create <name>       Create a migration');
+        println('  sommy migrate:up                  Apply pending migrations');
+        println('  sommy migrate:down                Revert last migration');
+        exit(0);
+}
+

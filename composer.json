@@ -1,0 +1,18 @@
+{
+  "name": "sommy/orm",
+  "description": "Sequelize-style lightweight ORM for PHP (Sommy ORM)",
+  "type": "library",
+  "require": {
+    "php": ">=8.0",
+    "ext-pdo": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Sommy\\ORM\\": "src/"
+    }
+  },
+  "bin": [
+    "bin/sommy"
+  ]
+}
+
