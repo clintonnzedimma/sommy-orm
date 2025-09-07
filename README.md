@@ -113,7 +113,7 @@ $qi->dropTable('users', ['ifExists' => true]);
 ## Defining Models
 Define a model with `SommyManager::define($name, $attributes, $options = [])`. This returns an instance of an anonymous subclass of `Model` that is bound to your table and schema.
 
-```
+```php
 use Sommy\ORM\Model;
 use Sommy\ORM\DataTypes;
 
@@ -130,14 +130,14 @@ Important: Many `Model` methods are static (Sequelize‑like). You can:
 
 - Call via the class name string of the returned instance:
 
-```
+```php
 $UserClass = $User::class; // get anonymous class name
 $id = $UserClass::create(['name' => 'Alice', 'age' => 30]);
 ```
 
 - Or create an instance and use instance helpers like `save()`:
 
-```
+```php
 $u = new $UserClass(['name' => 'Bob', 'age' => 25]);
 $u->save(); // INSERT, sets primary key if available
 ```
@@ -148,14 +148,14 @@ For convenience, calling static methods on the instance (e.g., `$User->findAll()
 
 Create (static):
 
-```
+```php
 $UserClass = $User::class;
 $id = $UserClass::create(['name' => 'Alice', 'age' => 30]);
 ```
 
 Create + save (instance):
 
-```
+```php
 $u = new $UserClass(['name' => 'Bob']);
 $u->age = 25;
 $u->save(); // INSERT
@@ -163,7 +163,7 @@ $u->save(); // INSERT
 
 Find:
 
-```
+```php
 $all = $UserClass::findAll();
 $admins = $UserClass::findAll(['is_admin' => 1], ['order' => ['id' => 'DESC']]);
 $first = $UserClass::findOne(['id' => 1]);
@@ -171,7 +171,7 @@ $first = $UserClass::findOne(['id' => 1]);
 
 Update:
 
-```
+```php
 // Bulk update
 $affected = $UserClass::update(['age' => 31], ['name' => 'Alice']);
 
@@ -185,7 +185,7 @@ if ($alice) {
 
 Delete:
 
-```
+```php
 // Bulk delete
 $deleted = $UserClass::destroy(['id' => [3,4,5]]); // IN (...) support
 
@@ -227,7 +227,7 @@ This generates `database/migrations/YYYMMDDHHMMSS_create_users.php` with a class
 
 3) Edit your migration, e.g.:
 
-```
+```php
 use Sommy\ORM\QueryInterface;
 
 class Migration_20250101010101_create_users
@@ -263,7 +263,7 @@ The CLI records applied migrations in a table `sommy_migrations`.
 
 ## Quick Start (End‑to‑End)
 
-```
+```php
 require __DIR__ . '/vendor/autoload.php';
 
 use Sommy\ORM\SommyManager;
