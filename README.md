@@ -20,7 +20,7 @@ composer dump-autoload
 
 2) Require Composer autoloader from your app:
 
-```
+```php
 require __DIR__ . '/vendor/autoload.php';
 ```
 
@@ -31,7 +31,7 @@ Create an array of connection settings and pass it to `Sommy\ORM\SommyManager`.
 
 SQLite example:
 
-```
+```php
 use Sommy\ORM\SommyManager;
 
 $sommy = new SommyManager([
@@ -42,7 +42,7 @@ $sommy = new SommyManager([
 
 MySQL/MariaDB example:
 
-```
+```php
 $sommy = new SommyManager([
     'dialect'  => 'mysql', // or 'mariadb'
     'host'     => '127.0.0.1',
@@ -56,7 +56,7 @@ $sommy = new SommyManager([
 
 PostgreSQL example:
 
-```
+```php
 $sommy = new SommyManager([
     'dialect'  => 'pgsql',
     'host'     => '127.0.0.1',
@@ -91,7 +91,7 @@ Common column options:
 ## Creating Tables
 Use `QueryInterface` to create tables. Example `users` table:
 
-```
+```php
 use Sommy\ORM\DataTypes;
 
 $qi = $sommy->getQueryInterface();
@@ -106,7 +106,7 @@ $qi->createTable('users', [
 
 Drop a table:
 
-```
+```php
 $qi->dropTable('users', ['ifExists' => true]);
 ```
 
@@ -306,4 +306,3 @@ foreach ($all as $u) {
 - Ensure the PDO driver for your DB is installed and enabled.
 - For MySQL/MariaDB, set a valid `charset` (defaults to `utf8mb4`).
 - If `migrate:up` fails, check your migration for typos in column definitions (e.g., `allowNull`, `primaryKey`).
-
