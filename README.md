@@ -13,7 +13,7 @@ If you are using this repository directly:
 
 1) Install dependencies and dump autoload
 
-```
+```bash
 composer install
 composer dump-autoload
 ```
@@ -52,6 +52,44 @@ $sommy = new SommyManager([
     'password' => '',
     'charset'  => 'utf8mb4',
 ]);
+```
+
+### Connecting to MySQL
+
+- Make sure the `pdo_mysql` extension is enabled (check with `php -m`).
+- Ensure a MySQL server is running and you have database credentials.
+- Create a database and user (example using the MySQL client):
+
+```bash
+mysql -u root -p
+```
+
+```sql
+CREATE DATABASE testdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'appuser'@'localhost' IDENTIFIED BY 'secret';
+GRANT ALL PRIVILEGES ON testdb.* TO 'appuser'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+- Configure Sommy to use MySQL (see example above), e.g.:
+
+```php
+use Sommy\ORM\SommyManager;
+
+$sommy = new SommyManager([
+    'dialect'  => 'mysql',
+    'host'     => '127.0.0.1',
+    'port'     => 3306,
+    'database' => 'testdb',
+    'username' => 'appuser',
+    'password' => 'secret',
+    'charset'  => 'utf8mb4',
+]);
+
+// Optional: quick connectivity check
+if (!$sommy->authenticate()) {
+    throw new RuntimeException('MySQL connection failed');
+}
 ```
 
 PostgreSQL example:
@@ -213,13 +251,13 @@ Sommy includes a tiny CLI in `bin/sommy` for simple time‑stamped migrations.
 
 1) Initialize config (creates `sommy.config.php`):
 
-```
+```bash
 php bin/sommy init:config
 ```
 
 2) Create a migration file:
 
-```
+```bash
 php bin/sommy migrate:create create_users
 ```
 
@@ -249,13 +287,13 @@ class Migration_20250101010101_create_users
 
 4) Apply pending migrations:
 
-```
+```bash
 php bin/sommy migrate:up
 ```
 
 5) Revert last migration:
 
-```
+```bash
 php bin/sommy migrate:down
 ```
 
