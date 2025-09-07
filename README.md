@@ -9,7 +9,14 @@ Works with MySQL, MariaDB, SQLite, and PostgreSQL.
 - `ext-pdo` and the PDO driver for your database (e.g., `pdo_mysql`, `pdo_sqlite`, `pdo_pgsql`)
 
 ## Installation
-If you are using this repository directly:
+
+Install via Composer (recommended):
+
+```bash
+composer require clintonnzedimma/sommy-orm
+```
+
+Or, if you are using this repository directly:
 
 1) Install dependencies and dump autoload
 

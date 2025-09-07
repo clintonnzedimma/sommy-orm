@@ -1,7 +1,16 @@
 {
-  "name": "sommy/orm",
+  "name": "clintonnzedimma/sommy-orm",
   "description": "Sequelize-style lightweight ORM for PHP (Sommy ORM)",
   "type": "library",
+  "keywords": [
+    "orm",
+    "pdo",
+    "mysql",
+    "mariadb",
+    "postgresql",
+    "sqlite",
+    "migrations"
+  ],
   "require": {
     "php": ">=8.0",
     "ext-pdo": "*"
@@ -15,4 +24,3 @@
     "bin/sommy"
   ]
 }
-
