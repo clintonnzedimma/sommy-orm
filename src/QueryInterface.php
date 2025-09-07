@@ -20,7 +20,7 @@ class QueryInterface
     public function select(string $table, array $columns = ['*'], array $where = [], array $options = []): array
     {
         [$whereSql, $params] = $this->buildWhere($where);
-        $cols = $columns ? implode(', ', array_map(fn($c) => $this->quoteIdent($c), $columns)) : '*';
+        $cols = $columns ? implode(', ', array_map(fn($c) => $this->formatSelectColumn((string)$c), $columns)) : '*';
         $sql = "SELECT {$cols} FROM " . $this->quoteIdent($table) . ($whereSql ? " WHERE {$whereSql}" : '');
         if (!empty($options['order'])) {
             $sql .= ' ORDER BY ' . $this->buildOrder($options['order']);
@@ -34,6 +34,36 @@ class QueryInterface
         $stmt = $this->pdo()->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Format a select column ensuring '*' and table.* are not quoted, and simple aliases work.
+     */
+    protected function formatSelectColumn(string $col): string
+    {
+        $c = trim($col);
+        // Plain star
+        if ($c === '*') return '*';
+        // table.* form
+        if (preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\.\*$/', $c, $m)) {
+            return $this->quoteIdent($m[1]) . '.*';
+        }
+        // Handle aliases: "expr AS alias" (case-insensitive)
+        if (preg_match('/^(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$/i', $c, $m)) {
+            $expr = $this->formatSelectColumn($m[1]);
+            $alias = $this->quoteIdent($m[2]);
+            return $expr . ' AS ' . $alias;
+        }
+        // If looks like a function call or contains spaces, return as-is
+        if (str_contains($c, '(') || str_contains($c, ')') || str_contains($c, ' ')) {
+            return $c;
+        }
+        // Normal identifier (may include table.col)
+        if (str_contains($c, '.')) {
+            [$t, $f] = explode('.', $c, 2);
+            return $this->quoteIdent($t) . '.' . $this->quoteIdent($f);
+        }
+        return $this->quoteIdent($c);
     }
 
     public function insert(string $table, array $data): string|bool

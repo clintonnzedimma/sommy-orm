@@ -18,7 +18,7 @@ abstract class Model
 {
     protected static SommyManager $manager;
     protected static string $tableName;
-    protected static array $attributes = [];
+    public static array $attributes = [];
     protected static ?string $primaryKey = null;
 
     protected array $data = [];

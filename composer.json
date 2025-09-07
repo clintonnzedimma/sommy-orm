@@ -20,6 +20,11 @@
       "Sommy\\ORM\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Database\\Models\\": "database/models/"
+    }
+  },
   "bin": [
     "bin/sommy"
   ]

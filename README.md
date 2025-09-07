@@ -351,3 +351,36 @@ foreach ($all as $u) {
 - Ensure the PDO driver for your DB is installed and enabled.
 - For MySQL/MariaDB, set a valid `charset` (defaults to `utf8mb4`).
 - If `migrate:up` fails, check your migration for typos in column definitions (e.g., `allowNull`, `primaryKey`).
+- If a migration class fails to load or you see a PHP parse error, ensure method signatures include the parameter variable:
+  use `public function up(Sommy\\ORM\\QueryInterface $qi): void` and `public function down(Sommy\\ORM\\QueryInterface $qi): void`.
+- On MySQL/MariaDB, DDL statements (CREATE/DROP TABLE) auto-commit and may end a transaction. The CLI now guards commit/rollback, but if you saw "There is no active transaction", update to the latest version and re-run.
+
+## Model Generator
+
+Generate a model class (Laravel-style) into `database/models`:
+
+```bash
+php bin/sommy make:model User
+```
+
+Options:
+- `--table=users`: set table name (default: lowercase name + 's')
+- `-m` or `--migration`: also generate a migration stub (e.g., `create_users`)
+- `--force`: overwrite the file if it exists
+
+Autoload for dev:
+- `composer.json` includes an `autoload-dev` mapping `Database\Models\` → `database/models/`.
+- Run `composer dump-autoload` after generating models so Composer picks them up.
+
+Using a generated model:
+
+```php
+use Sommy\ORM\SommyManager;
+use Database\Models\User;
+
+$sommy = new SommyManager([...]);
+User::register($sommy); // binds table + attributes defined in the model
+
+// After defining attributes in User::register():
+$id = User::create(['name' => 'Alice']);
+```

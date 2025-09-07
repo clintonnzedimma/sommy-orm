@@ -105,15 +105,17 @@ function cmd_migrate_create(string $name): void
 {
     $dir = getcwd() . '/database/migrations';
     if (!is_dir($dir)) mkdir($dir, 0777, true);
-    $ts = date('YmdHis');
+
+    $ts   = date('YmdHis');
     $base = $ts . '_' . preg_replace('/[^0-9A-Za-z_]/', '_', $name);
     $file = $dir . DIRECTORY_SEPARATOR . $base . '.php';
     $class = 'Migration_' . preg_replace('/[^0-9A-Za-z_]/', '_', $base);
-    $tpl = <<<PHP
-<?php
-use Sommy\\ORM\\QueryInterface;
 
-class {$class}
+    $tpl = <<<'PHP'
+<?php
+use Sommy\ORM\QueryInterface;
+
+class %s
 {
     public function up(QueryInterface $qi): void
     {
@@ -130,9 +132,11 @@ class {$class}
     }
 }
 PHP;
-    file_put_contents($file, $tpl);
+
+    file_put_contents($file, sprintf($tpl, $class));
     println("Created migration: $file");
 }
+
 
 function cmd_migrate_up(SommyManager $sommy): void
 {
@@ -145,14 +149,16 @@ function cmd_migrate_up(SommyManager $sommy): void
         if (!empty($applied[$base])) continue;
         $obj = new $class();
         println("Applying $base...");
-        $sommy->getConnection()->beginTransaction();
+        $pdo = $sommy->getConnection();
+        // Start a transaction if possible; MySQL may auto-commit DDL.
+        try { $pdo->beginTransaction(); } catch (Throwable $__) { /* ignore */ }
         try {
             $obj->up($qi);
             recordMigration($qi, $base);
-            $sommy->getConnection()->commit();
+            if ($pdo->inTransaction()) { $pdo->commit(); }
             $count++;
         } catch (Throwable $e) {
-            $sommy->getConnection()->rollBack();
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
             errorln("Failed $base: " . $e->getMessage());
             exit(1);
         }
@@ -174,16 +180,80 @@ function cmd_migrate_down(SommyManager $sommy): void
     $class = $migrations[$last];
     $obj = new $class();
     println("Reverting $last...");
-    $sommy->getConnection()->beginTransaction();
+    $pdo = $sommy->getConnection();
+    try { $pdo->beginTransaction(); } catch (Throwable $__) { /* ignore */ }
     try {
         $obj->down($qi);
         removeMigrationRecord($qi, $last);
-        $sommy->getConnection()->commit();
+        if ($pdo->inTransaction()) { $pdo->commit(); }
         println('Reverted 1 migration');
     } catch (Throwable $e) {
-        $sommy->getConnection()->rollBack();
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
         errorln('Failed to revert: ' . $e->getMessage());
         exit(1);
+    }
+}
+
+function cmd_make_model(string $name, array $options = []): void
+{
+    // Determine class and table names
+    $class = preg_replace('/[^A-Za-z0-9_]/', '', $name);
+    if ($class === '') { errorln('Invalid model name'); exit(1); }
+    $table = $options['table'] ?? strtolower($class) . 's';
+
+    $dir = getcwd() . '/database/models';
+    if (!is_dir($dir)) mkdir($dir, 0777, true);
+    $file = $dir . DIRECTORY_SEPARATOR . $class . '.php';
+    if (file_exists($file) && empty($options['force'])) {
+        errorln("Model already exists: $file (use --force to overwrite)");
+        exit(1);
+    }
+
+    $tpl = <<<'PHP'
+<?php
+namespace Database\Models;
+
+use Sommy\ORM\Model;
+use Sommy\ORM\SommyManager;
+use Sommy\ORM\DataTypes;
+
+/**
+ * {{CLASS}} model (Sommy ORM)
+ *
+ * How to wire in dev:
+ *  - Ensure Composer autoload-dev maps Database\Models to database/models
+ *  - Call {{CLASS}}::register(
+ *        new SommyManager([...])
+ *    ); once during bootstrap.
+ */
+class {{CLASS}} extends Model
+{
+    public static function register(SommyManager $sommy): void
+    {
+        static::configure(
+            $sommy,
+            '{{TABLE}}',
+            [
+                // Example attributes (uncomment and adjust):
+                // 'id'   => DataTypes::INTEGER(['primaryKey' => true, 'autoIncrement' => true, 'allowNull' => false]),
+                // 'name' => DataTypes::STRING(255, ['allowNull' => false]),
+            ]
+        );
+    }
+}
+PHP;
+
+    // Substitute placeholders while keeping PHP variables like $sommy literal
+    $rendered = strtr($tpl, [
+        '{{CLASS}}' => $class,
+        '{{TABLE}}' => $table,
+    ]);
+    file_put_contents($file, $rendered);
+    println("Created model: $file");
+
+    if (!empty($options['migration'])) {
+        $migName = 'create_' . $table;
+        cmd_migrate_create($migName);
     }
 }
 
@@ -208,6 +278,18 @@ switch ($cmd) {
         $sommy = new SommyManager($cfg);
         if ($cmd === 'migrate:up') cmd_migrate_up($sommy); else cmd_migrate_down($sommy);
         break;
+    case 'make:model':
+        // Usage: sommy make:model <Name> [--table=users] [-m|--migration] [--force]
+        $name = $argv[0] ?? null;
+        if (!$name) { errorln('Usage: sommy make:model <Name> [--table=users] [-m|--migration] [--force]'); exit(1); }
+        $opts = ['migration' => false, 'force' => false];
+        foreach (array_slice($argv, 1) as $opt) {
+            if ($opt === '-m' || $opt === '--migration') { $opts['migration'] = true; continue; }
+            if ($opt === '--force') { $opts['force'] = true; continue; }
+            if (str_starts_with($opt, '--table=')) { $opts['table'] = substr($opt, 8); continue; }
+        }
+        cmd_make_model($name, $opts);
+        break;
     case 'help':
     default:
         println('Sommy ORM CLI');
@@ -215,6 +297,7 @@ switch ($cmd) {
         println('  sommy migrate:create <name>       Create a migration');
         println('  sommy migrate:up                  Apply pending migrations');
         println('  sommy migrate:down                Revert last migration');
+        println('  sommy make:model <Name> [opts]    Generate a model class');
+        println('     Options: --table=tbl  -m/--migration  --force');
         exit(0);
 }
-
